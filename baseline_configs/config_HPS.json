@@ -1,0 +1,21 @@
+{
+    "device": "cpu",
+    "dataset": "mnist",
+    "method": "HPS",
+    "validation":false,
+    "output_dim": 64,
+    "batch_size": 128,
+    "epochs": 5,
+    "temperature": 1,
+    "clipping":1,
+    "optimizer": {
+        "name": "sgd",
+        "learning_rate": 1e-2,
+        "weight_decay":1e-4,
+        "momentum":0.9
+    },
+    "lr_scheduler": {
+        "steps": [100, 180], 
+        "entity": 0.1
+    }
+}

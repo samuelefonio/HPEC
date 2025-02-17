@@ -1,4 +1,4 @@
-import wandb
+# import wandb
 import torch
 import torch.nn as nn
 import numpy as np
@@ -69,9 +69,7 @@ def parse_args():
     parser.add_argument('-config',dest='config', default='configs/config.json', type = str, help='device')
     parser.add_argument('-rank',dest='rank', default=0, type = int, help='ranking of the run')
     parser.add_argument('-temp',dest='temperature', default=0.01, type = float, help='geometry of the output')
-    parser.add_argument('-dataset',dest='dataset', default='cars', type = str, help='device')
-    parser.add_argument('-setting',dest='setting', default='our', type = str, help='setting')
-    parser.add_argument('-dim',dest='dim', default='8', type = int, help='dim')
+    parser.add_argument('-dim', dest = 'dim', default=8, type = int, help = 'embedding dimension')
     args = parser.parse_args()
     return args
 
@@ -84,10 +82,10 @@ if __name__ == "__main__":
     torch.manual_seed(args.rank)
     config['device'] = args.device
     
-    run = wandb.init(project="your project",config = config)
+    # run = wandb.init(project="your_project",config = config)
 
 
-    name_file = f"{config['dataset']}_{args.rank}_{run.name}"
+    name_file = f"{config['dataset']}_{args.rank}"
     logs_directory = f"logs_{config['dataset']}"
     
     if not os.path.exists(logs_directory):
@@ -119,7 +117,6 @@ if __name__ == "__main__":
                 device = config['device'],
                 dataset = config['dataset'],
                 output_dim = config['output_dim'],
-                grad = False,
                 temperature = config['temperature'],
                 clipping = config['clipping'],
                 manifold = manifold,
@@ -142,7 +139,7 @@ if __name__ == "__main__":
                                                         opt = opt, 
                                                         device = config['device'], 
                                                         K = config['K'])
-        wandb.log({"training_acc": acc, "loss": loss_calculated}, step = epoch)
+        # wandb.log({"training_acc": acc, "loss": loss_calculated}, step = epoch)
         
         t1 = time.time()
         logging.info(f'Training at epoch {epoch}: Accuracy = {round(acc*100,4)} ; Loss = {round(loss_calculated,4)}; time = {round(t1-t0,2)}')
@@ -157,10 +154,10 @@ if __name__ == "__main__":
     logging.info("Total time --- %s seconds ---" % (time.time() - total_start_time))
     test_acc, test_AHC, test_prediction, test_tl = main_test(model, testloader, device = config['device'])
     logging.info(f'test Accuracy = {round(100*test_acc,4)}')
-    wandb.log({"test_acc": test_acc})
+    # wandb.log({"test_acc": test_acc})
     logging.info("saving the results")
     
     np.save(fileName_res+'.npy', test_prediction.cpu().numpy())
     np.save(fileName_res+'_tl.npy', test_tl.cpu().numpy())
-    wandb.finish()
+    # wandb.finish()
 

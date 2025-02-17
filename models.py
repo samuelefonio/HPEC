@@ -13,6 +13,7 @@ DATASETS_CLASSES = {'mnist':10,
                'cars':196}
 
 class SimpleCNN(nn.Module):
+    '''Source: https://github.com/VSainteuf/metric-guided-prototypes-pytorch'''
     def __init__(self, output_dim = 10):
         super(SimpleCNN, self).__init__()
         self.conv1 = nn.Sequential(nn.Conv2d(1,16,3),nn.BatchNorm2d(16),nn.ReLU(),nn.MaxPool2d(2))
@@ -47,7 +48,6 @@ class Model(nn.Module):
         device = 'cuda',
         dataset = 'mnist',
         output_dim = 8,
-        grad = False,
         temperature = 1.,
         clipping = 1,
         manifold = None,
@@ -80,6 +80,157 @@ class Model(nn.Module):
         embeddings = self.manifold.expmap0(embeddings)
         return embeddings
     
+def load_model(model, *args):
+    method = args[0]
+    args = args[1:]
+    if method in ['HPS','XE']:
+        return HPS_model(model, *args) 
+    elif method == 'HBL':
+        return HBL_model(model, *args)
+    elif method == 'CHPS':
+        return CHPS_model(model, *args)
+    elif method == 'ECL':
+        return ECL_model(model, *args)
+    elif method == 'NF':
+        return NF_model(model, *args)
+
+
+class HPS_model(nn.Module):
+    def __init__(self,
+            model,
+            device = 'cuda',
+            dataset = 'mnist',
+            output_dim = 8,
+            temperature = 0.01,
+            clipping = 1,
+            manifold = None,
+            seed = 42):
+            super(HPS_model, self).__init__()
+            self.model = model
+            self.device = device
+            self.output_dim = output_dim
+            self.temperature = temperature
+            self.dataset = dataset
+            self.seed = seed
+            self.prototypes = hyperspherical_embedding(self.dataset, self.device, self.output_dim, self.seed) # grad = False by default
+
+    def forward(self, images):
+        embeddings = self.model(images)      
+        embeddings = F.normalize(embeddings, p=2, dim=1)
+        return embeddings / self.temperature
+        
+    
+class HBL_model(nn.Module):
+    def __init__(
+        self,
+        model,
+        device = 'cuda',
+        dataset = 'mnist',
+        output_dim = 8,
+        temperature = 0.01,
+        clipping = 1,
+        manifold = None,
+        seed = 42
+    ):
+        super(HBL_model, self).__init__()
+        self.model = model
+        self.device = device
+        self.dataset = dataset
+        self.output_dim = output_dim
+        self.temperature = temperature
+        self.clipping = clipping
+        self.manifold = manifold
+        
+        prototypes = self.manifold.expmap0(-0.1 * torch.rand((DATASETS_CLASSES[self.dataset], self.output_dim), device = self.device) + 0.1)
+        self.prototypes = geoopt.ManifoldParameter(prototypes, manifold=manifold, requires_grad=True) #notice that in this method we have set a different optimizer for the prototypes
+        
+    def forward(self, images):
+        embeddings = self.model(images)      
+        embeddings = clip(embeddings, self.clipping)
+        embeddings = self.manifold.expmap0(embeddings)
+        dists = -self.manifold.dist(embeddings[:, None, :], self.prototypes[None, :, :])        
+        return dists / self.temperature
+
+class ECL_model(nn.Module):
+    def __init__(
+        self,
+        model,
+        device = 'cuda',
+        dataset = 'mnist',
+        output_dim = 8,
+        temperature = 0.01,
+        clipping = 1,
+        manifold = None,
+        seed = 42
+    ):
+        super(ECL_model, self).__init__()
+        self.model = model
+        self.device = device
+        self.dataset = dataset
+        self.output_dim = output_dim
+        self.temperature = temperature
+        self.prototypes = nn.Parameter(torch.rand((DATASETS_CLASSES[self.dataset], self.output_dim), device = self.device), requires_grad=True)
+
+    def forward(self, images):
+        embeddings = self.model(images)
+        dists = -torch.norm(embeddings[:, None, :] - self.prototypes[None, :, :], dim=-1)
+        return dists/self.temperature
+
+class NF_model(nn.Module):
+    def __init__(
+        self,
+        model,
+        device = 'cuda',
+        dataset = 'mnist',
+        output_dim = 8,
+        temperature = 0.01,
+        clipping = 1,
+        manifold = None,
+        seed = 42
+    ):
+        super(NF_model, self).__init__()
+        self.model = model
+        self.device = device
+        self.dataset = dataset
+        self.output_dim = output_dim
+        self.temperature = temperature
+        self.prototypes = nn.Parameter(torch.rand((DATASETS_CLASSES[self.dataset], self.output_dim), device = self.device), requires_grad=True)
+
+    def forward(self, images):
+        embeddings = self.model(images)
+        embeddings = F.normalize(embeddings, p=2, dim=1)
+        self.prototypes.data = F.normalize(self.prototypes.data, p=2, dim=1)
+        dists = nn.CosineSimilarity(dim=-1)(embeddings[:, None, :], self.prototypes[None, :, :])
+        return dists/self.temperature
+
+class CHPS_model(nn.Module):
+    def __init__(
+        self,
+        model,
+        device = 'cuda',
+        dataset = 'mnist',
+        output_dim = 8,
+        temperature = 0.01,
+        clipping = 1,
+        manifold = None,
+        seed = 42
+    ):
+        super(CHPS_model, self).__init__()
+        self.model = model
+        self.device = device
+        self.dataset = dataset
+        self.output_dim = output_dim
+        self.temperature = temperature
+        self.seed = seed
+        self.prototypes = hyperspherical_embedding(self.dataset, self.device, self.output_dim, self.seed) # grad = false by default
+        
+    def forward(self, images):
+        embeddings = self.model(images)
+        embeddings = F.normalize(embeddings, p=2, dim=1)
+        dist = -(1 - nn.CosineSimilarity(dim=-1)(embeddings[:, None, :], self.prototypes[None, :, :]))     
+        return dist/self.temperature
+
+
 def load_backbone(dataset, output_dim):
     dataset = dataset.lower()
     if dataset == 'mnist':

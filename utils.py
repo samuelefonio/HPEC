@@ -38,7 +38,7 @@ class SeparationLoss(nn.Module):
         ).to(protos.device)
         return M.max(dim=1)[0].mean()
 
-def hyperspherical_embedding(dataset, device, embedding_dimension):
+def hyperspherical_embedding(dataset, device, embedding_dimension, seed):
     """
     Function to learn the prototypes according to the separationLoss Minimization
     embedding_dimension : 
@@ -53,7 +53,7 @@ def hyperspherical_embedding(dataset, device, embedding_dimension):
     n_steps=1000
     wd=1e-4
 
-    torch.manual_seed(0) 
+    torch.manual_seed(seed) 
     mapping = torch.rand((DATASETS_CLASSES[dataset], embedding_dimension), device=device, requires_grad = True)
     
     optimizer = torch.optim.SGD([mapping], lr=lr, momentum=momentum, weight_decay=wd)
@@ -359,3 +359,19 @@ def clip(input_vector, r):
     min_norm = torch.clamp(float(r)/input_norm, max = 1)
     return min_norm[:, None] * input_vector
 
+def prediction(method, output, prototypes):
+    if method in ['HPS']:
+        output = nn.CosineSimilarity(dim=-1)(output[:,None,:], prototypes[None,:,:])
+        pred = output.max(-1, keepdim=True)[1]
+    elif method in ['CHPS','HBL','ECL','XE','NF']:
+        pred = output.max(-1, keepdim=True)[1]
+    return pred
+
+class HPS_loss(nn.Module):
+    def __init__(self, prototypes):
+        super(HPS_loss, self).__init__()
+        self.prototypes = prototypes
+
+    def forward(self, output, target):
+        dist = (1 - nn.CosineSimilarity(eps=1e-9)(output, self.prototypes[target])).pow(2).sum()
+        return dist
