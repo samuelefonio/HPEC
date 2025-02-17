@@ -2,8 +2,6 @@
 
 This is the official repository for the paper "Hyperbolic Prototypical Entailment Cones for Image Classification"
 
-This repository is released for reproducibility, if any problem occurs please contact us at [omitted for anonimity]
-
 Before running the code, install the requirements.txt 
 
 ```
